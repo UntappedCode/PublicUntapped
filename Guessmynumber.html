@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<script>
+var Button = function(btnObj){
+    this.x = btnObj.x || 0;
+    this.y = btnObj.y || 0;
+    this.w = btnObj.width || 240;
+    this.h = btnObj.height || 36;
+    this.label = btnObj.label || "Push";
+    this.defaultLabel = this.label;
+    this.onClick = btnObj.onClick || function() {};
+    this.rad = btnObj.radius || 0;
+    this.r = 115;
+    this.g = 171;
+    this.b = 90;
+    this.textSize = btnObj.textSize || 12;
+    this.hidden = btnObj.hidden || false;
+    this.active = btnObj.active || true;
+
+    this.click = function(){
+        if (!this.active) {
+            return;
+        }
+        this.onClick();
+    };
+
+    this.draw = function(){
+        if (this.hidden) {return;}
+        var c1, c2;
+        textFont(createFont("sans-serif"));
+        if (this.isMouseInside()){
+            if (mouseIsPressed) {
+                c2 = color(this.r+30, this.g+30, this.b+30);
+                c1 = color(this.r-30, this.g-30, this.b-30);
+            }
+            else {
+                c1 = color(this.r+20, this.g+20, this.b+20);
+                c2 = color(this.r-40, this.g-40, this.b-40);
+            }
+        }
+        else {
+            c1 = color(this.r+30, this.g+30, this.b+30);
+            c2 = color(this.r-30, this.g-30, this.b-30);
+        }
+        if (!this.active) {
+            c1 = color(253, 253, 253, 204);
+            c2 = color(215, 215, 215, 215);
+        }
+        var c3 = color(0, 0, 0);
+
+        pushMatrix();
+        translate(this.x, this.y);
+        //Draw center
+        for(var i = -this.h/2+this.rad; i<=this.h/2-this.rad; i++){
+            var x = this.w/2;
+            var c = lerpColor(c1, c2, (i+this.h/2)/this.h);
+            stroke(c);
+            line(-x, i, x, i);
+        }
+        //Draw top and bottom
+        for (var i = this.h/2-this.rad+1; i <=this.h/2; i++) {
+            var c = lerpColor(c1, c2, (i+this.h/2)/this.h);
+            stroke(c);
+            var x = this.w/2-this.rad;
+            x +=sqrt(pow(this.rad, 2)-pow(i-this.h/2+this.rad, 2));
+            line(-x, i, x, i);
+        }
+        for (var i = this.h/2-this.rad+1; i <=this.h/2; i++) {
+            var c = lerpColor(c1, c2, (-i+this.h/2)/this.h);
+            stroke(c);
+            var x = this.w/2-this.rad;
+            x +=sqrt(pow(this.rad, 2)-pow(i-this.h/2+this.rad, 2));
+            line(-x, -i, x, -i);
+        }
+
+        textSize(this.textSize);
+        textAlign(LEFT, CENTER);
+        if (this.active) {
+            fill(255, 255, 255);
+        }
+        else {
+            fill(170, 170, 170);
+        }
+        var h = textAscent() + textDescent();
+        text(this.label,
+            -textWidth(this.label)/2,
+            this.textSize/2-h/2);
+        popMatrix();
+    };
+
+    this.isMouseInside = function() {
+        if (mouseX > this.x + this.w/2 || mouseX < this.x -            this.w/2) {
+            return false;
+        }
+        if (mouseY > this.y + this.h/2 || mouseY < this.y -            this.h/2) {
+            return false;
+        }
+
+        return true;
+    };
+
+    this.activate = function() {
+        this.active = true;
+        this.label = this.defaultLabel;
+    };
+};
+var ButtonManager = function(buttons) {
+    this.buttons = buttons || [];
+
+    this.isMouseInside = function() {
+        for (var i = 0; i < this.buttons.length; i++) {
+            if (this.buttons[i].isMouseInside()) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    this.handleMouseReleased = function(){
+        var i;
+
+        for(i = 0; i < this.buttons.length; i++) {
+            if (this.buttons[i].isMouseInside()) {
+                this.buttons[i].click();
+                return;
+            }
+        }
+    };
+
+    this.drawButtons = function() {
+        var i;
+
+        for(i = 0; i < this.buttons.length; i++){
+            this.buttons[i].draw();
+        }
+
+    };
+
+    this.activateAll = function() {
+        for (var i in this.buttons) {
+            this.buttons[i].activate();
+        }
+    };
+};
+
+
+
+// =============================
+// Range for guessing
+// =============================
+var MIN = parseInt((Program.settings().min || 1), 10);
+var MAX = parseInt((Program.settings().max || 16), 10);
+var NUMBERS = MAX-MIN + 1;
+var SCREEN_WIDTH = parseInt((Program.settings().width || width), 10);
+
+// =============================
+// Canvas layout and colors
+// =============================
+// array of numbers
+var MARGIN = 10;
+var FIELD = (SCREEN_WIDTH - 2*MARGIN) / NUMBERS;
+var NUMBER_LINE_Y = 30;
+
+// colors
+var BACKGROUND_COLOR = color(255, 255, 255);
+var GENERAL_INFO_COLOR = color(18, 18, 18);
+var GUESS_INFO_COLOR = color(0, 0, 0);
+var NUMBER_COLOR = color(0, 0, 0);
+var WIN_FOREGROUND = color(0, 0, 0);
+var WIN_BACKGROUND = color(145, 195, 220);
+var GUESS_WRONG_COLOR = color(255, 0, 0);
+var INFERRED_WRONG_COLOR = color(0, 0, 0);
+
+// =============================
+// Game logic
+// =============================
+// game initialization
+var myNumber, numbers, possible, guessedNumbers, guessInfo, win, hoverNumber;
+
+var currentMin, currentMax, guessedInOrder;
+
+
+var resetGame = function() {
+    myNumber = round(random(MIN, MAX));
+    if (Program.settings().number) {
+        myNumber = parseInt(Program.settings().number, 10);
+    }
+    numbers = [];
+    possible = [];
+    for (var n=MIN; n<=MAX; n++) {
+        numbers.push(n);
+        possible.push(true);
+    }
+    guessedNumbers = {};
+    guessInfo = "";
+    win = false;
+    currentMin = MIN;
+    currentMax = MAX;
+    guessedInOrder = null;
+};
+
+// new guess processing
+var newGuess = function(guess) {
+    // is the guess the average of max and min, rounded down (so that it is an integer).
+    var bestGuess = Math.floor((currentMax + currentMin) / 2);
+    guessedInOrder = (bestGuess === guess);
+    guessedNumbers[guess] = true;
+
+    if (guess === myNumber) {
+        guessInfo = "✔ Yes! That's my number!";
+        win = true;
+        Program.runTest(function() {
+           return guessedInOrder;
+        });
+    } else if (myNumber > guess) {
+        guessInfo = "My number is higher than " +
+            guess + ". Guess higher →";
+        for (var i=0; i<NUMBERS; i++) {
+            if (numbers[i] <= guess) {
+                possible[i] = false;
+            }
+        }
+        currentMin = guess + 1;
+    } else {
+        guessInfo = "My number is lower than " +
+            guess + ". Guess lower ←";
+        for (var i=0; i<NUMBERS; i++) {
+            if (numbers[i] >= guess) {
+                possible[i] = false;
+            }
+        }
+        currentMax = guess - 1;
+    }
+
+};
+
+// =============================
+// Mouse
+// =============================
+// converts mouse position to field number (index)
+var fieldFromMousePosition = function(x, y) {
+    if (abs(y - NUMBER_LINE_Y) < (FIELD * 0.48)) {
+        return floor((x - MARGIN) / FIELD);
+    } else {
+        return -1; // meaning: mouse is not over any field
+    }
+};
+
+// converts mouse position to field number, but only if
+// the field is active (clickable), otherwise returns -1
+var currentFieldIfClickable = function(x, y) {
+    if (win) {
+        return -1;
+    }
+    var field = fieldFromMousePosition(mouseX, mouseY);
+    if (field >= 0 && field < NUMBERS && possible[field]) {
+        return field;
+    } else {
+        return -1;
+    }
+};
+
+// handler of "mouse click" event
+
+
+// =============================
+// Visualization
+// =============================
+
+// Draws line of numbers, using crosses to indicate
+// numbers which are not possible and
+// highlights correct guess
+var drawNumbers = function() {
+    textAlign(CENTER, CENTER);
+    textFont(createFont("monospace"));
+    textSize(FIELD * 0.7);
+    for (var n=MIN; n<=MAX; n++) {
+        var field = n - MIN;
+        var x = MARGIN + (field+0.5)*FIELD;
+        var y = NUMBER_LINE_Y;
+        if (win && myNumber === n) {
+            // highlight correct guess
+            fill(WIN_BACKGROUND);
+            noStroke();
+            rectMode(CENTER);
+            rect(x, y, FIELD*0.9, FIELD*0.9);
+            fill(WIN_FOREGROUND);
+        } else {
+            if (field === hoverNumber && possible[field]) {
+                fill(217, 217, 217);
+                rectMode(CENTER);
+                noStroke();
+                rect(x, y, FIELD*0.9, FIELD*1.0);
+            }
+            fill(NUMBER_COLOR);
+        }
+        text(n, x, y);
+        // cross numbers which are not possible
+        if (!possible[field]) {
+            if (n in guessedNumbers) {
+                stroke(GUESS_WRONG_COLOR);
+            } else {
+                stroke(INFERRED_WRONG_COLOR);
+            }
+            strokeWeight(4);
+            var d = FIELD * 0.33;
+            line(x - d, y - d, x + d, y + d);
+            line(x - d, y + d, x + d, y - d);
+        }
+    }
+};
+
+// prints general info about the game
+var printGeneralInfo = function() {
+    fill(GENERAL_INFO_COLOR);
+    textAlign(CENTER, TOP);
+};
+
+
+// prints message about current guess
+var printGuessInfo = function() {
+    fill(GUESS_INFO_COLOR);
+    textAlign(CENTER, TOP);
+    textSize(SCREEN_WIDTH / 30);
+    text(guessInfo, SCREEN_WIDTH/2, 50);
+};
+
+var btnLabel = "New game";
+if (Program.settings().number) {
+    btnLabel = "Start over";
+}
+var buttonMgr = new ButtonManager([new Button({
+    x: SCREEN_WIDTH/2,
+    y: 110,
+    width: 114,
+    height: 34,
+    textSize: 14,
+    label: btnLabel,
+    radius: 3,
+    onClick: function() {
+        resetGame();
+    }
+})]);
+
+
+var drawAll = function() {
+    background(BACKGROUND_COLOR);
+    printGeneralInfo();
+    drawNumbers();
+    printGuessInfo();
+    if (Object.keys(guessedNumbers).length > 0) {
+        buttonMgr.drawButtons();
+    }
+};
+
+mouseMoved = function() {
+    var field = currentFieldIfClickable(mouseX, mouseY);
+    if (field >=0) {
+        hoverNumber = field;
+    }
+    if (buttonMgr.isMouseInside() || field >= 0) {
+        cursor(HAND);
+    } else {
+        cursor(ARROW);
+    }
+
+    drawAll();
+};
+
+mouseReleased = function() {
+    buttonMgr.handleMouseReleased();
+
+    var field = currentFieldIfClickable(mouseX, mouseY);
+    if (field >= 0) {
+        newGuess(numbers[field]);
+    }
+
+    drawAll();
+};
+
+resetGame();
+drawAll();
+</script>
+</html>
